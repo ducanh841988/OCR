@@ -30,6 +30,8 @@ class Model(object):
             phase,
             visualize,
             data_path,
+            data_path_valid,
+            data_path_test,
             data_base_dir,
             output_dir,
             batch_size,
@@ -60,6 +62,10 @@ class Model(object):
         if phase == 'train':
             self.s_gen = DataGen(
                 data_base_dir, data_path, valid_target_len=valid_target_length, evaluate=False)
+            self.s_gen_valid = DataGen(
+                data_base_dir, data_path_valid, evaluate=True)
+            self.s_gen_test = DataGen(
+                data_base_dir, data_path_test, evaluate=True)
         else:
             batch_size = 1
             self.s_gen = DataGen(
@@ -280,9 +286,9 @@ class Model(object):
                 logging.info('%f out of %d correct' %(num_correct, num_total))
         elif self.phase == 'train':
             total = (self.s_gen.get_size() // self.batch_size)
+            WER = 1.0
             with tqdm(desc='Train: ', total=total) as pbar:
                 for epoch in range(self.num_epoch):
-
                    logging.info('Generating first batch)')
                    for i,batch in enumerate(self.s_gen.gen(self.batch_size)):
                         # Get a batch and make a step.
@@ -336,9 +342,9 @@ class Model(object):
 
                         writer.add_summary(summaries, current_step)
                         curr_step_time = (time.time() - start_time)
-                        step_time += curr_step_time / self.steps_per_checkpoint
+                        step_time += curr_step_time / total
                         precision = num_correct / num_total
-                        logging.info('step %f - time: %f, loss: %f, perplexity: %f, precision: %f, batch_len: %f'%(current_step, curr_step_time, step_loss, math.exp(step_loss) if step_loss < 300 else float('inf'), precision, batch_len))
+                        #logging.info('step %f - time: %f, loss: %f, perplexity: %f, precision: %f, batch_len: %f'%(current_step, curr_step_time, step_loss, math.exp(step_loss) if step_loss < 300 else float('inf'), precision, batch_len))
                         loss += step_loss / self.steps_per_checkpoint
                         pbar.set_description('Train, loss={:.8f}'.format(step_loss))
                         pbar.update()
@@ -351,7 +357,7 @@ class Model(object):
                         #    print (step_outputs[0])
 
                         # Once in a while, we save checkpoint, print statistics, and run evals.
-                        if current_step % self.steps_per_checkpoint == 0:
+                        '''if current_step % self.steps_per_checkpoint == 0:
                             # Print statistics for the previous epoch.
                             perplexity = math.exp(loss) if loss < 300 else float('inf')
                             logging.info("global step %d step-time %.2f loss %f  perplexity "
@@ -362,8 +368,21 @@ class Model(object):
                                 checkpoint_path = os.path.join(self.model_dir, "translate.ckpt")
                                 logging.info("Saving model, current_step: %d"%current_step)
                                 self.saver_all.save(self.sess, checkpoint_path, global_step=self.global_step)
-                            step_time, loss = 0.0, 0.0
+                            step_time, loss = 0.0, 0.0'''
                             #sys.stdout.flush()
+                   print ('Run validation...')
+                   valid_error_rate = self.eval(self.s_gen_valid)
+                   print ('Finished validation...')
+                   if WER > valid_error_rate: 
+                       WER = valid_error_rate
+                       checkpoint_path = os.path.join(self.model_dir, "translate.ckpt")
+                       logging.info("Saving model, current_step: %d"%current_step)
+                       logging.info("best WER on validation: %f"%WER)
+                       self.saver_all.save(self.sess, checkpoint_path, global_step=self.global_step)
+                       print ('Run testing...')
+                       test_error_rate = self.eval(self.s_gen_test)
+                       print ('Finished testing...')
+                       logging.info("best WER on test: %f"%test_error_rate)
 
     # step, read one batch, generate gradients
     def step(self, encoder_masks, img_data, zero_paddings, decoder_inputs, target_weights,
@@ -437,7 +456,7 @@ class Model(object):
                         Image.ANTIALIAS)
                 img_data = np.asarray(img, dtype=np.uint8)
                 for idx in range(len(output_valid)):
-                    output_filename = os.path.join(output_dir, 'image_%d.jpg'%(idx))
+                    output_filename = os.path.join(output_dir, 'image_%d.png'%(idx))
                     attention = attentions[idx][:(int(real_len/4)-1)]
 
                     # I have got the attention_orig here, which is of size 32*len(ground_truth), the only thing left is to visualize it and save it to output_filename
@@ -458,3 +477,50 @@ class Model(object):
                     img_out.save(output_filename)
                     #print (output_filename)
                 #assert False
+    def eval(self, data_gen):
+        num_correct = 0
+        num_total = 0
+        for batch in data_gen.gen(self.batch_size):
+            start_time = time.time()
+            bucket_id = batch['bucket_id']
+            img_data = batch['data']
+            zero_paddings = batch['zero_paddings']
+            decoder_inputs = batch['decoder_inputs']
+            target_weights = batch['target_weights']
+            encoder_masks = batch['encoder_mask']
+            file_list = batch['filenames']
+            real_len = batch['real_len']
+            
+            grounds = [a for a in np.array([decoder_input.tolist() for decoder_input in decoder_inputs]).transpose()]
+            _, step_loss, step_logits, step_attns = self.step(encoder_masks, img_data, zero_paddings, decoder_inputs, target_weights, bucket_id, forward_only = True)
+            step_outputs = [b for b in np.array([np.argmax(logit, axis=1).tolist() for logit in step_logits]).transpose()]
+            
+            for idx, output, ground in zip(range(len(grounds)), step_outputs, grounds):
+                flag_ground,flag_out = True, True
+                num_total += 1
+                output_valid = []
+                ground_valid = []
+                for j in range(1,len(ground)):
+                    s1 = output[j-1]
+                    s2 = ground[j]
+                    if s2 != 2 and flag_ground:
+                        ground_valid.append(s2)
+                    else:
+                        flag_ground = False
+                    if s1 != 2 and flag_out:
+                        output_valid.append(s1)
+                    else:
+                        flag_out = False
+                if distance_loaded:
+                    num_incorrect = distance.levenshtein(output_valid, ground_valid)
+                    if self.visualize:
+                        self.visualize_attention(file_list[idx], step_attns[idx], output_valid, ground_valid, num_incorrect>0, real_len)
+                    num_incorrect = float(num_incorrect) / len(ground_valid)
+                    num_incorrect = min(1.0, num_incorrect)
+                else:
+                    if output_valid == ground_valid:
+                        num_incorrect = 0
+                    else:
+                        num_incorrect = 1
+                num_correct += 1. - num_incorrect
+        return (num_total - num_correct)*1.0 /num_total

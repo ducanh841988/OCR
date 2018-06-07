@@ -29,6 +29,16 @@ def process_args(args, defaults):
                         help=('Path of file containing the path and labels'
                             ' of training or testing data, default=%s'
                             %(defaults.DATA_PATH)))
+    parser.add_argument('--data-path-valid', dest="data_path_valid",
+                        type=str, default=defaults.DATA_PATH,
+                        help=('Path of file containing the path and labels'
+                            ' of training or testing data, default=%s'
+                            %(defaults.DATA_PATH)))
+    parser.add_argument('--data-path-test', dest="data_path_test",
+                        type=str, default=defaults.DATA_PATH,
+                        help=('Path of file containing the path and labels'
+                            ' of training or testing data, default=%s'
+                            %(defaults.DATA_PATH)))
     parser.add_argument('--data-base-dir', dest="data_base_dir",
                         type=str, default=defaults.DATA_BASE_DIR,
                         help=('The base directory of the paths in the file '
@@ -122,6 +132,8 @@ def main(args, defaults):
                 phase = parameters.phase,
                 visualize = parameters.visualize,
                 data_path = parameters.data_path,
+                data_path_valid = parameters.data_path_valid,
+                data_path_test = parameters.data_path_test,
                 data_base_dir = parameters.data_base_dir,
                 output_dir = parameters.output_dir,
                 batch_size = parameters.batch_size,

@@ -11,7 +11,6 @@ import sys
 reload(sys)
 sys.setdefaultencoding("utf-8")
 
-
 class DataGen(object):
     GO = 1
     EOS = 2
@@ -21,7 +20,7 @@ class DataGen(object):
                  evaluate = False,
                  valid_target_len = float('inf'),
                  img_width_range = (100, 800),
-                 word_len = 60):
+                 word_len = 12):
         """
         :param data_root:
         :param annotation_fn:
@@ -31,6 +30,7 @@ class DataGen(object):
         """
         print("DATA GEN")
         img_height = 32
+        self.eval = evaluate
         self.data_root = data_root
         if os.path.exists(annotation_fn):
             self.annotation_path = annotation_fn
@@ -45,9 +45,12 @@ class DataGen(object):
             self.bucket_specs = [(int(64 / 4), 9 + 2), (int(108 / 4), 15 + 2),
                              (int(140 / 4), 17 + 2), (int(256 / 4), 20 + 2),
                              (int(math.ceil(img_width_range[1] / 4)), word_len + 2)]'''
-        self.bucket_specs = [(int(100 / 4), int(word_len/4) + 2), (int(200 / 4), int(word_len/4) + 2),
+        '''self.bucket_specs = [(int(100 / 4), int(word_len/4) + 2), (int(200 / 4), int(word_len/4) + 2),
                              (int(300 / 4), int(word_len/2) + 2), (int(400 / 4), int(word_len/2) + 2),
-                             (int(500 / 4), word_len + 2), (int(600 / 4), word_len + 2), (int(700 / 4), word_len + 2), (int(800 / 4), word_len + 2)]
+                             (int(500 / 4), word_len + 2), (int(600 / 4), word_len + 2), (int(700 / 4), word_len + 2), (int(800 / 4), word_len + 2)]'''
+        self.bucket_specs = [(int(32 / 4), int(word_len/4) + 2), (int(64 / 4), int(word_len/3) + 2),
+                             (int(96 / 4), int(word_len/2) + 2), (int(128 / 4), int(word_len/2) + 2),
+                             (int(160 / 4), word_len + 2), (int(192 / 4), word_len + 2), (int(224 / 4), word_len + 2)]
         self.max_len = word_len + 2
 
         self.bucket_min_width, self.bucket_max_width = img_width_range
@@ -60,7 +63,7 @@ class DataGen(object):
         with open(os.path.join(self.data_root,'Vocab.txt'), "r") as ins:
             for line in ins:
                 self.char2index.append(line.strip())
-        self.char2index.append(' ')
+        #self.char2index.append(' ')
         print self.char2index
     def clear(self):
         self.bucket_data = {i: BucketData()
@@ -82,7 +85,7 @@ class DataGen(object):
                 img_path, lex = l[:index], l[index+1:]
                 if (len(lex.strip()) >= self.max_len):
                     continue
-                #print img_path, lex
+                #print img_path, lex, len(lex.strip()), self.max_len
                 try:
                     img_bw, word = self.read_data(img_path, lex.strip())
                     #print (word)
@@ -118,11 +121,26 @@ class DataGen(object):
             #print self.data_root, img_path
             img = Image.open(img_file)
             w, h = img.size
+            w_distortion, h_distortion = 0, 0
+            if self.eval == False:
+                angle = random.randint(0, 20) - 10
+                h_distortion = random.randint(30, 35)
+                w_distortion = w * h_distortion / h
+                if w_distortion > 224:
+                    w_distortion = 224
+                img = img.rotate(angle, expand=1 )
+                img = img.resize((int(w_distortion), int(h_distortion)), Image.ANTIALIAS)
+
+
             h_new = self.image_height
-            w_new = max(100, math.floor( ( w * h_new / h ) / 100 ) * 100)
-            if w_new > 800:
-                w_new = 800
-            img = img.resize((int(w_new), int(h_new)), Image.ANTIALIAS)
+            w_new = max(32, math.floor( ( w * h_new / h ) / 32  + 1 ) * 32)
+            if w_new > 224:
+                w_new = 224
+            new_im = Image.new("RGB", (int(w_new), int(h_new)), (255, 255, 255))
+            new_im.paste(img, (int((w_new - w_distortion)//2), int((h_new-h_distortion)//2)), img)
+            img = new_im  #img.resize((int(w_new), int(h_new)), Image.ANTIALIAS)
+            #img.show()
+            #input("Press Enter to continue...")
             '''aspect_ratio = float(w) / float(h)
             if aspect_ratio < float(self.bucket_min_width) / self.image_height:
                 img = img.resize(
@@ -162,8 +180,11 @@ class DataGen(object):
 
         return img_bw, word
     def get_char(self, id):
-        assert 3 <= id <= len(self.char2index)
-        return self.char2index[id - 3]
+        assert 0 <= id <= len(self.char2index) + 3
+        if id - 3 > 0 :
+            return self.char2index[id - 3]
+        else:
+            return " "
 
 def test_gen():
     print('testing gen_valid')
