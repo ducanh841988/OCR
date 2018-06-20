@@ -287,9 +287,12 @@ class Model(object):
         elif self.phase == 'train':
             total = (self.s_gen.get_size() // self.batch_size)
             WER = 1.0
+            swriter = open("result_log.txt", "a")
             with tqdm(desc='Train: ', total=total) as pbar:
                 for epoch in range(self.num_epoch):
                    logging.info('Generating first batch)')
+                   n_correct = 0
+                   n_total = 0
                    for i,batch in enumerate(self.s_gen.gen(self.batch_size)):
                         # Get a batch and make a step.
                         num_total = 0
@@ -344,6 +347,8 @@ class Model(object):
                         curr_step_time = (time.time() - start_time)
                         step_time += curr_step_time / total
                         precision = num_correct / num_total
+                        n_total += num_total
+                        n_correct += num_correct
                         #logging.info('step %f - time: %f, loss: %f, perplexity: %f, precision: %f, batch_len: %f'%(current_step, curr_step_time, step_loss, math.exp(step_loss) if step_loss < 300 else float('inf'), precision, batch_len))
                         loss += step_loss / self.steps_per_checkpoint
                         pbar.set_description('Train, loss={:.8f}'.format(step_loss))
@@ -370,9 +375,13 @@ class Model(object):
                                 self.saver_all.save(self.sess, checkpoint_path, global_step=self.global_step)
                             step_time, loss = 0.0, 0.0'''
                             #sys.stdout.flush()
+                   print("Epoch " + str(epoch) +  "WER = " + str( 1 - n_correct * 1.0/n_total))
+                   swriter.write("Epoch " + str(epoch) +  " WER = " + str( 1 - n_correct * 1.0/n_total) + "\n")
                    print ('Run validation...')
                    valid_error_rate = self.eval(self.s_gen_valid)
                    print ('Finished validation...')
+                   print("WER on validation: %f"%valid_error_rate)
+                   swriter.write("WER on validation: " + str(valid_error_rate)  + "\n")
                    if WER > valid_error_rate: 
                        WER = valid_error_rate
                        checkpoint_path = os.path.join(self.model_dir, "translate.ckpt")
@@ -383,6 +392,8 @@ class Model(object):
                        test_error_rate = self.eval(self.s_gen_test)
                        print ('Finished testing...')
                        logging.info("best WER on test: %f"%test_error_rate)
+                       swriter.write("best WER on test: %f" + str(test_error_rate)  + "\n")
+            swriter.close()
 
     # step, read one batch, generate gradients
     def step(self, encoder_masks, img_data, zero_paddings, decoder_inputs, target_weights,

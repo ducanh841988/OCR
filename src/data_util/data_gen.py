@@ -123,22 +123,23 @@ class DataGen(object):
             w, h = img.size
             w_distortion, h_distortion = 0, 0
             if self.eval == False:
-                angle = random.randint(0, 20) - 10
-                h_distortion = random.randint(30, 35)
+                angle = random.randint(0, 30) - 15
+                '''h_distortion = random.randint(30, 35)
                 w_distortion = w * h_distortion / h
                 if w_distortion > 224:
-                    w_distortion = 224
+                    w_distortion = 224'''
                 img = img.rotate(angle, expand=1 )
-                img = img.resize((int(w_distortion), int(h_distortion)), Image.ANTIALIAS)
+                #img = img.resize((int(w_distortion), int(h_distortion)), Image.ANTIALIAS)
 
 
             h_new = self.image_height
             w_new = max(32, math.floor( ( w * h_new / h ) / 32  + 1 ) * 32)
             if w_new > 224:
                 w_new = 224
-            new_im = Image.new("RGB", (int(w_new), int(h_new)), (255, 255, 255))
-            new_im.paste(img, (int((w_new - w_distortion)//2), int((h_new-h_distortion)//2)), img)
-            img = new_im  #img.resize((int(w_new), int(h_new)), Image.ANTIALIAS)
+            img = img.resize((int(w_new), int(h_new)), Image.ANTIALIAS)
+            #new_im = Image.new("RGB", (int(w_new), int(h_new)), (255, 255, 255))
+            #new_im.paste(img, (int((w_new - w_distortion)//2), int((h_new-h_distortion)//2)), img)
+            #img = new_im  #img.resize((int(w_new), int(h_new)), Image.ANTIALIAS)
             #img.show()
             #input("Press Enter to continue...")
             '''aspect_ratio = float(w) / float(h)
